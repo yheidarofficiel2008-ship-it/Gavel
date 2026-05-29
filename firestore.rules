@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Rules for Committees
+    match /committees/{committeeId} {
+      // Allowed publicly to let delegates find and join live MUN debates
+      allow get, list: if true;
+      
+      // Creating a committee requires an authenticated Organizer
+      allow create: if request.auth != null;
+         
+      // Updating committee timers, speakers, and caucuses is allowed for live debate synchronisation
+      allow update: if true;
+          
+      // Anyone can delete a committee (needed for presidency/admin deletion)
+      allow delete: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+      match /gossip/{gossipId} {
+        allow read, write: if true;
+      }
+      match /resolutions/{resolutionId} {
+        allow read, write: if true;
+      }
+      match /sessionsHistory/{sessionId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
