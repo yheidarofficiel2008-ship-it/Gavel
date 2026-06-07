@@ -1,10 +1,10 @@
 {
-  "projectId": "gavel-15c36",
-  "appId": "1:329210055218:web:f2ab9d9c39f682ca9d4a2b",
-  "apiKey": "AIzaSyAa93LpD6PfAmLys7mQgBtCgt33ZpzdZxA",
-  "authDomain": "gavel-15c36.firebaseapp.com",
+  "projectId": "gavelmunapp",
+  "appId": "1:299859492432:web:1541cb6b08a16c08099b55",
+  "apiKey": "AIzaSyD_vleNafbfCexio51Hw_IDld3N8ligNsE",
+  "authDomain": "gavelmunapp.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-fd5977d3-b333-4fdf-a869-3538728737b1",
-  "storageBucket": "gavel-15c36.firebasestorage.app",
-  "messagingSenderId": "329210055218",
+  "storageBucket": "gavelmunapp.firebasestorage.app",
+  "messagingSenderId": "299859492432",
   "measurementId": ""
 }
