@@ -313,9 +313,13 @@ export default function CommitteeSessionView({
     return () => unsub();
   }, [committeeId]);
 
-  // Listen to messages subcollection
+  // Listen to messages subcollection (limited to 100 most recent to prevent massive read spikes)
   useEffect(() => {
-    const qSnap = query(collection(db, 'committees', committeeId, 'messages'), orderBy('createdAt', 'desc'));
+    const qSnap = query(
+      collection(db, 'committees', committeeId, 'messages'), 
+      orderBy('createdAt', 'desc'),
+      limit(100)
+    );
     const unsub = onSnapshot(qSnap, (snapshot) => {
       const list: LiveMessage[] = [];
       snapshot.forEach((d) => {
@@ -327,9 +331,13 @@ export default function CommitteeSessionView({
     return () => unsub();
   }, [committeeId]);
 
-  // Listen to gossip subcollection
+  // Listen to gossip subcollection (limited to 50 most recent)
   useEffect(() => {
-    const qSnap = query(collection(db, 'committees', committeeId, 'gossip'), orderBy('createdAt', 'desc'));
+    const qSnap = query(
+      collection(db, 'committees', committeeId, 'gossip'), 
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
     const unsub = onSnapshot(qSnap, (snapshot) => {
       const list: LiveGossip[] = [];
       snapshot.forEach((d) => {
@@ -341,9 +349,13 @@ export default function CommitteeSessionView({
     return () => unsub();
   }, [committeeId]);
 
-  // Listen to resolutions subcollection
+  // Listen to resolutions subcollection (limited to 30 most recent)
   useEffect(() => {
-    const qSnap = query(collection(db, 'committees', committeeId, 'resolutions'), orderBy('createdAt', 'desc'));
+    const qSnap = query(
+      collection(db, 'committees', committeeId, 'resolutions'), 
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
     const unsub = onSnapshot(qSnap, (snapshot) => {
       const list: LiveResolution[] = [];
       snapshot.forEach((d) => {
@@ -355,9 +367,13 @@ export default function CommitteeSessionView({
     return () => unsub();
   }, [committeeId]);
 
-  // Listen to sessionsHistory subcollection
+  // Listen to sessionsHistory subcollection (limited to 30 most recent)
   useEffect(() => {
-    const qSnap = query(collection(db, 'committees', committeeId, 'sessionsHistory'), orderBy('createdAt', 'desc'));
+    const qSnap = query(
+      collection(db, 'committees', committeeId, 'sessionsHistory'), 
+      orderBy('createdAt', 'desc'),
+      limit(30)
+    );
     const unsub = onSnapshot(qSnap, (snapshot) => {
       const list: any[] = [];
       snapshot.forEach((d) => {
@@ -476,6 +492,7 @@ export default function CommitteeSessionView({
   }
 
   // Check individual suspension
+  const isEn = committee?.language === 'EN';
   const isSuspendedIndividually = committee.suspendedDelegations?.includes(joinedCountry);
   const isGlobalSessionSuspended = committee.sessionSuspended;
 
@@ -493,14 +510,18 @@ export default function CommitteeSessionView({
         <div className="max-w-xl space-y-6">
           <div className="w-16 h-1 bg-black/60 mx-auto mb-4 animate-pulse" />
           <h1 className="font-sans text-4xl sm:text-5xl font-extrabold tracking-tight text-neutral-950 leading-tight uppercase">
-            SUSPENSION DE SÉANCE
+            {isEn ? "SESSION SUSPENDED" : "SUSPENSION DE SÉANCE"}
           </h1>
           <p className="font-sans text-xs sm:text-sm font-bold uppercase tracking-wide text-neutral-900 max-w-sm mx-auto leading-relaxed">
-            Le Bureau de la Présidence a suspendu la session de débats en cours. Veuillez patienter dans le silence réglementaire.
+            {isEn 
+              ? "The Bureau of the Chair has suspended the ongoing debate session. Please wait in formal silence." 
+              : "Le Bureau de la Présidence a suspendu la session de débats en cours. Veuillez patienter dans le silence réglementaire."}
           </p>
           <div className="pt-8 flex items-center justify-center space-x-2.5">
             <span className="h-2 w-2 bg-black rounded-full animate-ping" />
-            <span className="text-[10px] font-mono tracking-widest text-neutral-950 uppercase font-black">SYNCHRONISATION DE SÉANCE</span>
+            <span className="text-[10px] font-mono tracking-widest text-neutral-950 uppercase font-black">
+              {isEn ? "SESSION SYNCHRONIZATION" : "SYNCHRONISATION DE SÉANCE"}
+            </span>
           </div>
         </div>
       </div>
@@ -513,12 +534,18 @@ export default function CommitteeSessionView({
         <div className="max-w-xl space-y-6">
           <AlertTriangle className="h-12 w-12 text-neutral-950 mx-auto animate-bounce" />
           <h1 className="font-sans text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-950 uppercase leading-snug">
-            Délégation Suspendue
+            {isEn ? "Delegation Suspended" : "Délégation Suspendue"}
           </h1>
           <p className="font-sans text-xs sm:text-sm font-bold uppercase tracking-wide text-neutral-900 leading-relaxed max-w-md mx-auto">
-            Votre délégation ({joinedCountry}) a été temporairement suspendue par la présidence du comité.
+            {isEn 
+              ? `Your delegation (${joinedCountry}) has been temporarily suspended by the committee chair.` 
+              : `Votre délégation (${joinedCountry}) a été temporairement suspendue par la présidence du comité.`}
           </p>
-          <p className="text-[11px] text-neutral-850 font-semibold uppercase tracking-wider">Vos privilèges d'écriture et de parole ont été temporairement gelés.</p>
+          <p className="text-[11px] text-neutral-850 font-semibold uppercase tracking-wider">
+            {isEn 
+              ? "Your privileges to speak or type have been temporarily frozen." 
+              : "Vos privilèges d'écriture et de parole ont été temporairement gelés."}
+          </p>
         </div>
       </div>
     );
@@ -1376,7 +1403,6 @@ export default function CommitteeSessionView({
     }, 50);
   };
 
-  const isEn = committee?.language === 'EN';
 
   const t = {
     loading: isEn ? "Loading session..." : "Chargement de la session...",

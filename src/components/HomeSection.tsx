@@ -86,6 +86,11 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
   // Sync all committees in real-time
   useEffect(() => {
+    // If user is actively joined/inside a debate session, suspend general lobby listener to conserve Firestore read quota
+    if (joinedRole !== null) {
+      return;
+    }
+
     const path = 'committees';
     const q = query(collection(db, path));
     
@@ -115,21 +120,23 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
         return bT - aT;
       });
       setCommittees(list);
-      
-      // Keep selected committee synced
-      if (selectedCommittee) {
-        const updatedSelected = list.find(c => c.id === selectedCommittee.id);
-        if (updatedSelected) {
-          setSelectedCommittee(updatedSelected);
-        }
-      }
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
     });
 
     return () => unsubscribe();
-  }, [selectedCommittee]);
+  }, [joinedRole]); // Re-evaluate when entering/exiting sessions to start/stop the lobby listener!
+
+  // Keep selected committee synced when list updates
+  useEffect(() => {
+    if (selectedCommittee) {
+      const updatedSelected = committees.find(c => c.id === selectedCommittee.id);
+      if (updatedSelected && updatedSelected !== selectedCommittee) {
+        setSelectedCommittee(updatedSelected);
+      }
+    }
+  }, [committees]);
 
   // Synchronize local timers with Firebase data for Delegate View
   useEffect(() => {
