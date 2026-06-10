@@ -149,6 +149,47 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
     }
   }, [committees]);
 
+  // Live sync the selected committee's actual document from its active database (which is custom if useCustomFirebase is enabled)
+  useEffect(() => {
+    if (!selectedCommittee) return;
+
+    const activeDocRef = doc(activeSessionDb, 'committees', selectedCommittee.id);
+    
+    const unsubscribe = onSnapshot(activeDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSelectedCommittee(prev => {
+          if (!prev || prev.id !== docSnap.id) return prev;
+          return {
+            ...prev,
+            name: data.name || prev.name,
+            description: data.description !== undefined ? data.description : prev.description,
+            delegations: data.delegations || prev.delegations || [],
+            activeSpeakers: data.activeSpeakers || prev.activeSpeakers || [],
+            activeCaucus: data.activeCaucus || prev.activeCaucus,
+            language: data.language || prev.language,
+            chairEmail: data.chairEmail || prev.chairEmail,
+            chairPassword: data.chairPassword || prev.chairPassword,
+            createdAt: data.createdAt || prev.createdAt,
+            updatedAt: data.updatedAt || prev.updatedAt,
+            useCustomFirebase: data.useCustomFirebase !== undefined ? data.useCustomFirebase : prev.useCustomFirebase,
+            firebaseApiKey: data.firebaseApiKey !== undefined ? data.firebaseApiKey : prev.firebaseApiKey,
+            firebaseAuthDomain: data.firebaseAuthDomain !== undefined ? data.firebaseAuthDomain : prev.firebaseAuthDomain,
+            firebaseProjectId: data.firebaseProjectId !== undefined ? data.firebaseProjectId : prev.firebaseProjectId,
+            firebaseStorageBucket: data.firebaseStorageBucket !== undefined ? data.firebaseStorageBucket : prev.firebaseStorageBucket,
+            firebaseMessagingSenderId: data.firebaseMessagingSenderId !== undefined ? data.firebaseMessagingSenderId : prev.firebaseMessagingSenderId,
+            firebaseAppId: data.firebaseAppId !== undefined ? data.firebaseAppId : prev.firebaseAppId,
+            firebaseDatabaseId: data.firebaseDatabaseId !== undefined ? data.firebaseDatabaseId : prev.firebaseDatabaseId,
+          } as Committee;
+        });
+      }
+    }, (error) => {
+      console.warn("Error listening to selected committee on active DB:", error);
+    });
+
+    return () => unsubscribe();
+  }, [selectedCommittee?.id, activeSessionDb]);
+
   // Synchronize local timers with Firebase data for Delegate View
   useEffect(() => {
     if (joinedRole === 'delegate' && selectedCommittee) {
