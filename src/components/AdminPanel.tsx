@@ -87,7 +87,15 @@ export default function AdminPanel() {
           chairEmail: data.chairEmail || '',
           chairPassword: data.chairPassword || '',
           createdAt: data.createdAt,
-          updatedAt: data.updatedAt
+          updatedAt: data.updatedAt,
+          useCustomFirebase: data.useCustomFirebase || false,
+          firebaseApiKey: data.firebaseApiKey || '',
+          firebaseAuthDomain: data.firebaseAuthDomain || '',
+          firebaseProjectId: data.firebaseProjectId || '',
+          firebaseStorageBucket: data.firebaseStorageBucket || '',
+          firebaseMessagingSenderId: data.firebaseMessagingSenderId || '',
+          firebaseAppId: data.firebaseAppId || '',
+          firebaseDatabaseId: data.firebaseDatabaseId || ''
         } as Committee);
       });
       // Sort newest first

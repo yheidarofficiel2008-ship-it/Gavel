@@ -224,6 +224,7 @@ export default function CommitteeSessionView({
   const [committee, setCommittee] = useState<Committee | null>(initialCommittee || null);
   const [activeDb, setActiveDb] = useState(getDbForCommittee(initialCommittee));
   const db = activeDb; // Dynamically shadow and route all internal query/update handlers to the active database
+  const [customDbPermissionError, setCustomDbPermissionError] = useState(false);
   
   // Real-time subcollection state arrays
   const [messages, setMessages] = useState<LiveMessage[]>([]);
@@ -301,6 +302,8 @@ export default function CommitteeSessionView({
         const resolvedDb = getDbForCommittee(masterData);
         setActiveDb(resolvedDb);
       }
+    }, (error) => {
+      console.warn("onSnapshot masterDb committee error:", error);
     });
     return () => unsub();
   }, [committeeId]);
@@ -318,10 +321,18 @@ export default function CommitteeSessionView({
         const clone = { ...committee };
         // Remove undefined fields to prevent firestore errors
         Object.keys(clone).forEach(key => (clone as any)[key] === undefined && delete (clone as any)[key]);
-        setDoc(docRef, clone).catch(err => console.error("Error backing up committee to custom DB: ", err));
+        setDoc(docRef, clone).catch(err => {
+          console.error("Error backing up committee to custom DB: ", err);
+          if (activeDb !== masterDb && (err?.code === 'permission-denied' || err?.message?.includes('permission'))) {
+            setCustomDbPermissionError(true);
+          }
+        });
       }
     }).catch(err => {
       console.warn("Could not check/create committee document on custom DB: ", err);
+      if (activeDb !== masterDb && (err?.code === 'permission-denied' || err?.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
+      }
     });
   }, [activeDb, committeeId, committee]);
 
@@ -352,8 +363,21 @@ export default function CommitteeSessionView({
           projectedResolution: data.projectedResolution || null,
           gossipEnabled: data.gossipEnabled !== false,
           resolutionsEnabled: data.resolutionsEnabled !== false,
-          grades: data.grades || {}
+          grades: data.grades || {},
+          useCustomFirebase: data.useCustomFirebase || false,
+          firebaseApiKey: data.firebaseApiKey || '',
+          firebaseAuthDomain: data.firebaseAuthDomain || '',
+          firebaseProjectId: data.firebaseProjectId || '',
+          firebaseStorageBucket: data.firebaseStorageBucket || '',
+          firebaseMessagingSenderId: data.firebaseMessagingSenderId || '',
+          firebaseAppId: data.firebaseAppId || '',
+          firebaseDatabaseId: data.firebaseDatabaseId || ''
         } as any);
+      }
+    }, (error) => {
+      console.warn("onSnapshot activeDb committee error:", error);
+      if (activeDb !== masterDb && (error.code === 'permission-denied' || error.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
       }
     });
     return () => unsub();
@@ -373,6 +397,11 @@ export default function CommitteeSessionView({
         list.push({ id: d.id, ...item } as LiveMessage);
       });
       setMessages(list);
+    }, (error) => {
+      console.warn("onSnapshot activeDb messages error:", error);
+      if (activeDb !== masterDb && (error.code === 'permission-denied' || error.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
+      }
     });
     return () => unsub();
   }, [committeeId, activeDb]);
@@ -391,6 +420,11 @@ export default function CommitteeSessionView({
         list.push({ id: d.id, ...item } as LiveGossip);
       });
       setGossips(list);
+    }, (error) => {
+      console.warn("onSnapshot activeDb gossip error:", error);
+      if (activeDb !== masterDb && (error.code === 'permission-denied' || error.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
+      }
     });
     return () => unsub();
   }, [committeeId, activeDb]);
@@ -409,6 +443,11 @@ export default function CommitteeSessionView({
         list.push({ id: d.id, ...item } as LiveResolution);
       });
       setResolutions(list);
+    }, (error) => {
+      console.warn("onSnapshot activeDb resolutions error:", error);
+      if (activeDb !== masterDb && (error.code === 'permission-denied' || error.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
+      }
     });
     return () => unsub();
   }, [committeeId, activeDb]);
@@ -426,9 +465,14 @@ export default function CommitteeSessionView({
         list.push({ id: d.id, ...d.data() });
       });
       setSessionsHistory(list);
+    }, (error) => {
+      console.warn("onSnapshot activeDb sessionsHistory error:", error);
+      if (activeDb !== masterDb && (error.code === 'permission-denied' || error.message?.includes('permission'))) {
+        setCustomDbPermissionError(true);
+      }
     });
     return () => unsub();
-  }, [committeeId]);
+  }, [committeeId, activeDb]);
 
   // Resolve default message target for chair (first delegation)
   useEffect(() => {
@@ -1609,8 +1653,117 @@ export default function CommitteeSessionView({
     gossipAuthorAnonymous: isEn ? "Anonymous" : "Anonyme",
   };
 
+  const handleCopyRules = () => {
+    const rulesText = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /committees/{committeeId} {
+      allow read, write: if true;
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+      match /gossip/{gossipId} {
+        allow read, write: if true;
+      }
+      match /resolutions/{resolutionId} {
+        allow read, write: if true;
+      }
+      match /sessionsHistory/{sessionId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}`;
+    navigator.clipboard.writeText(rulesText);
+    alert(isEn ? "Firestore rules copied to clipboard!" : "Règles Firestore copiées dans le presse-papiers ! Collez-les dans votre console Firebase.");
+  };
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-neutral-900 font-sans flex flex-col antialiased">
+      
+      {/* 0. Custom Firebase Database Permission Denied Instructions Modal */}
+      {customDbPermissionError && (
+        <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fade-in overflow-y-auto">
+          <div className="bg-white border border-neutral-200 text-neutral-900 rounded-[28px] p-6 md:p-8 max-w-2xl w-full my-8 shadow-2xl relative">
+            <button 
+              onClick={() => setCustomDbPermissionError(false)}
+              className="absolute top-4 right-4 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-205 rounded-full p-2 transition-colors cursor-pointer"
+              title="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            
+            <div className="flex items-center gap-3 text-red-600 mb-4 pl-1">
+              <AlertTriangle className="h-6 w-6 stroke-[2.5]" />
+              <h2 className="text-lg font-black tracking-tight uppercase">Configuration Firebase requise (Erreur de permission)</h2>
+            </div>
+            
+            <p className="text-neutral-600 text-[12.5px] font-medium leading-relaxed mb-4 pl-1">
+              Vous avez connecté ce comité à une <strong>base de données séparée (Firebase externe)</strong>. 
+              Pour que les fonctionnalités de débat (messages, gossips, résolutions, orateurs, votes) fonctionnent en temps réel, 
+              les <strong>Règles de sécurité Firestore (Firestore Security Rules)</strong> de votre projet Firebase externe doivent être configurées.
+            </p>
+            
+            <div className="bg-neutral-50 px-4 py-3 border border-neutral-200 rounded-2xl mb-5 space-y-2.5">
+              <span className="block text-[10px] font-black text-neutral-800 uppercase tracking-wider">Comment résoudre ce problème :</span>
+              <ol className="list-decimal list-inside text-neutral-600 text-[11px] font-semibold space-y-1.5 pl-1.5">
+                <li>Rendez-vous sur la <a href={`https://console.firebase.google.com/project/${committee?.firebaseProjectId || "votre-projet"}/firestore/rules`} target="_blank" rel="noopener noreferrer" className="text-neutral-950 underline hover:text-neutral-800">Console Firebase &gt; Cloud Firestore &gt; Règles (Rules)</a>.</li>
+                <li>Cliquez sur le bouton ci-dessous pour copier les règles requises.</li>
+                <li>Remplacez les règles de votre base par celles-ci et cliquez sur <strong>Publier</strong>.</li>
+              </ol>
+            </div>
+
+            <div className="relative mb-5 pt-4">
+              <span className="absolute top-2 left-2 text-[9px] font-black tracking-widest text-neutral-400 uppercase font-mono">CODE DES RÈGLES</span>
+              <button
+                onClick={handleCopyRules}
+                className="absolute top-2 right-2 text-[9px] font-black tracking-widest text-[#101010] bg-amber-400 hover:bg-amber-300 px-2.5 py-1.5 rounded transition-all cursor-pointer shadow-sm uppercase font-sans border border-amber-500"
+              >
+                Copier les règles
+              </button>
+              <pre className="bg-neutral-950 text-neutral-200 text-[11px] font-mono p-4 rounded-2xl overflow-x-auto max-h-[180px] border border-neutral-800 mt-4">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /committees/{committeeId} {
+      allow read, write: if true;
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+      match /gossip/{gossipId} {
+        allow read, write: if true;
+      }
+      match /resolutions/{resolutionId} {
+        allow read, write: if true;
+      }
+      match /sessionsHistory/{sessionId} {
+        allow read, write: if true;
+      }
+    }
+  }
+}`}
+              </pre>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-end pt-2">
+              <button
+                onClick={() => setCustomDbPermissionError(false)}
+                className="px-5 py-3 rounded-xl bg-neutral-150 hover:bg-neutral-200 text-neutral-800 border border-neutral-200 text-xs font-bold transition-all text-center"
+              >
+                Ignorer (Le temps réel risque de ne pas fonctionner)
+              </button>
+              <a
+                href={`https://console.firebase.google.com/project/${committee?.firebaseProjectId || "votre-projet"}/firestore/rules`}
+                target="_blank"
+                rel="no_referrer noreferrer"
+                className="px-5 py-3 rounded-xl bg-neutral-950 hover:bg-neutral-900 text-white text-xs font-bold tracking-wider uppercase transition-all text-center"
+              >
+                Ouvrir ma Console Firebase
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* GLOBAL FULL SCREEN OVERLAYS */}
       
