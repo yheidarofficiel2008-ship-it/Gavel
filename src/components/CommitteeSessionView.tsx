@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { db, auth } from '../lib/firebase';
+import { db as masterDb, auth, getDbForCommittee } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { 
   collection, 
@@ -17,7 +17,9 @@ import {
   orderBy, 
   limit, 
   getDocs,
-  where
+  where,
+  setDoc,
+  getDocFromServer
 } from 'firebase/firestore';
 import { Committee, Delegation } from '../types';
 import { 
@@ -55,6 +57,7 @@ interface CommitteeSessionViewProps {
   joinedCountry: string;
   joinedName: string;
   onExit: () => void;
+  committee?: Committee;
 }
 
 // Sub-interfaces for Firestore subcollections
@@ -214,10 +217,13 @@ export default function CommitteeSessionView({
   joinedRole, 
   joinedCountry, 
   joinedName, 
-  onExit 
+  onExit,
+  committee: initialCommittee
 }: CommitteeSessionViewProps) {
   
-  const [committee, setCommittee] = useState<Committee | null>(null);
+  const [committee, setCommittee] = useState<Committee | null>(initialCommittee || null);
+  const [activeDb, setActiveDb] = useState(getDbForCommittee(initialCommittee));
+  const db = activeDb; // Dynamically shadow and route all internal query/update handlers to the active database
   
   // Real-time subcollection state arrays
   const [messages, setMessages] = useState<LiveMessage[]>([]);
@@ -279,9 +285,49 @@ export default function CommitteeSessionView({
   const [sessionTimeLeft, setSessionTimeLeft] = useState(0);
   const [speakerTimeLeft, setSpeakerTimeLeft] = useState(0);
 
-  // Listen to main committee document
+  // 1. Listen to the MASTER database permanently to retrieve latest dynamic project configuration changes
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'committees', committeeId), (docSnap) => {
+    const unsub = onSnapshot(doc(masterDb, 'committees', committeeId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const masterData = { id: docSnap.id, ...data } as Committee;
+        
+        // If we don't have initial committee state, populate from master DB
+        if (!committee) {
+          setCommittee(masterData);
+        }
+
+        // Keep activeDb in sync with master DB config (e.g. if custom firebase got enabled/configured)
+        const resolvedDb = getDbForCommittee(masterData);
+        setActiveDb(resolvedDb);
+      }
+    });
+    return () => unsub();
+  }, [committeeId]);
+
+  // 2. Mirror/ensure committee document exists on the custom database
+  useEffect(() => {
+    if (activeDb === masterDb) return; // on master DB, no need to mirror
+    if (!committee) return;
+
+    // Fetch the document on the custom database to check if it exists
+    const docRef = doc(activeDb, 'committees', committeeId);
+    getDocFromServer(docRef).then((docSnap) => {
+      if (!docSnap.exists()) {
+        // Copy the master committee document structure to the custom database
+        const clone = { ...committee };
+        // Remove undefined fields to prevent firestore errors
+        Object.keys(clone).forEach(key => (clone as any)[key] === undefined && delete (clone as any)[key]);
+        setDoc(docRef, clone).catch(err => console.error("Error backing up committee to custom DB: ", err));
+      }
+    }).catch(err => {
+      console.warn("Could not check/create committee document on custom DB: ", err);
+    });
+  }, [activeDb, committeeId, committee]);
+
+  // 3. Listen to main committee document on active DB for real-time session state sync
+  useEffect(() => {
+    const unsub = onSnapshot(doc(activeDb, 'committees', committeeId), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setCommittee({
@@ -311,12 +357,12 @@ export default function CommitteeSessionView({
       }
     });
     return () => unsub();
-  }, [committeeId]);
+  }, [committeeId, activeDb]);
 
   // Listen to messages subcollection (limited to 100 most recent to prevent massive read spikes)
   useEffect(() => {
     const qSnap = query(
-      collection(db, 'committees', committeeId, 'messages'), 
+      collection(activeDb, 'committees', committeeId, 'messages'), 
       orderBy('createdAt', 'desc'),
       limit(100)
     );
@@ -329,12 +375,12 @@ export default function CommitteeSessionView({
       setMessages(list);
     });
     return () => unsub();
-  }, [committeeId]);
+  }, [committeeId, activeDb]);
 
   // Listen to gossip subcollection (limited to 50 most recent)
   useEffect(() => {
     const qSnap = query(
-      collection(db, 'committees', committeeId, 'gossip'), 
+      collection(activeDb, 'committees', committeeId, 'gossip'), 
       orderBy('createdAt', 'desc'),
       limit(50)
     );
@@ -347,12 +393,12 @@ export default function CommitteeSessionView({
       setGossips(list);
     });
     return () => unsub();
-  }, [committeeId]);
+  }, [committeeId, activeDb]);
 
   // Listen to resolutions subcollection (limited to 30 most recent)
   useEffect(() => {
     const qSnap = query(
-      collection(db, 'committees', committeeId, 'resolutions'), 
+      collection(activeDb, 'committees', committeeId, 'resolutions'), 
       orderBy('createdAt', 'desc'),
       limit(30)
     );
@@ -365,12 +411,12 @@ export default function CommitteeSessionView({
       setResolutions(list);
     });
     return () => unsub();
-  }, [committeeId]);
+  }, [committeeId, activeDb]);
 
   // Listen to sessionsHistory subcollection (limited to 30 most recent)
   useEffect(() => {
     const qSnap = query(
-      collection(db, 'committees', committeeId, 'sessionsHistory'), 
+      collection(activeDb, 'committees', committeeId, 'sessionsHistory'), 
       orderBy('createdAt', 'desc'),
       limit(30)
     );

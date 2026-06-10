@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { db, handleFirestoreError } from '../lib/firebase';
+import { db, handleFirestoreError, getDbForCommittee } from '../lib/firebase';
 import { useFirebase } from '../lib/FirebaseProvider';
 import { 
   collection, 
@@ -83,6 +83,9 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
   // Interval References
   const speakerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const caucusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Resolve custom Firestore DB for active session
+  const activeSessionDb = getDbForCommittee(selectedCommittee);
 
   // Sync all committees in real-time
   useEffect(() => {
@@ -233,7 +236,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
           ...currentQueue[0],
           durationUsed: currentQueue[0].durationTotal - timeLeft
         };
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           activeSpeakers: currentQueue,
           speakerRunning: speakerRunning
         });
@@ -247,7 +250,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
   const handleSyncCaucusTime = async (timeLeft: number, active: boolean) => {
     if (!selectedCommittee || !canModifyFirestore()) return;
     try {
-      await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+      await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
         activeCaucus: {
           type: caucusType,
           topic: caucusTopic,
@@ -324,7 +327,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
     setSpeakerRunning(nextState);
     // Sync status to Firestore
     if (selectedCommittee && canModifyFirestore()) {
-      updateDoc(doc(db, 'committees', selectedCommittee.id), {
+      updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
         speakerRunning: nextState
       }).catch(err => console.error(err));
     }
@@ -352,7 +355,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
     // Sync directly to firesbase if owner, otherwise client local
     if (canModifyFirestore()) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           activeSpeakers: currentSpeakers
         });
       } catch (err) {
@@ -381,7 +384,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
     if (canModifyFirestore()) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           activeSpeakers: currentQueue,
           speakerRunning: false
         });
@@ -412,7 +415,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
     if (canModifyFirestore()) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           delegations: updatedDelegations
         });
       } catch (err) {
@@ -450,7 +453,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
     if (canModifyFirestore()) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           delegations: updatedDelegations
         });
         setNewCountryName('');
@@ -476,7 +479,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
     if (canModifyFirestore()) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           delegations: updatedDelegations
         });
       } catch (err) {
@@ -502,7 +505,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
 
     if (canModifyFirestore() && selectedCommittee) {
       try {
-        await updateDoc(doc(db, 'committees', selectedCommittee.id), {
+        await updateDoc(doc(activeSessionDb, 'committees', selectedCommittee.id), {
           activeCaucus: {
             type,
             topic: caucusTopic,
@@ -556,6 +559,7 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
         joinedCountry={joinedCountry}
         joinedName={joinedName}
         onExit={handleExitSession}
+        committee={selectedCommittee}
       />
     );
   }

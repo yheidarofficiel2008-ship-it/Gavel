@@ -56,6 +56,16 @@ export default function AdminPanel() {
   const [chairEmail, setChairEmail] = useState('');
   const [chairPassword, setChairPassword] = useState('');
 
+  // Custom Firebase configuration fields state
+  const [useCustomFirebase, setUseCustomFirebase] = useState(false);
+  const [firebaseApiKey, setFirebaseApiKey] = useState('');
+  const [firebaseAuthDomain, setFirebaseAuthDomain] = useState('');
+  const [firebaseProjectId, setFirebaseProjectId] = useState('');
+  const [firebaseStorageBucket, setFirebaseStorageBucket] = useState('');
+  const [firebaseMessagingSenderId, setFirebaseMessagingSenderId] = useState('');
+  const [firebaseAppId, setFirebaseAppId] = useState('');
+  const [firebaseDatabaseId, setFirebaseDatabaseId] = useState('');
+
   // Sync user's committees in real-time
   useEffect(() => {
     if (!user) return;
@@ -126,7 +136,15 @@ export default function AdminPanel() {
         chairEmail: chairEmail.trim(),
         chairPassword: chairPassword.trim(),
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        useCustomFirebase,
+        firebaseApiKey: useCustomFirebase ? firebaseApiKey.trim() : '',
+        firebaseAuthDomain: useCustomFirebase ? firebaseAuthDomain.trim() : '',
+        firebaseProjectId: useCustomFirebase ? firebaseProjectId.trim() : '',
+        firebaseStorageBucket: useCustomFirebase ? firebaseStorageBucket.trim() : '',
+        firebaseMessagingSenderId: useCustomFirebase ? firebaseMessagingSenderId.trim() : '',
+        firebaseAppId: useCustomFirebase ? firebaseAppId.trim() : '',
+        firebaseDatabaseId: useCustomFirebase ? firebaseDatabaseId.trim() : ''
       };
 
       await setDoc(docRef, newCommittee);
@@ -137,6 +155,14 @@ export default function AdminPanel() {
       setChairEmail('');
       setChairPassword('');
       setLanguage('FR');
+      setUseCustomFirebase(false);
+      setFirebaseApiKey('');
+      setFirebaseAuthDomain('');
+      setFirebaseProjectId('');
+      setFirebaseStorageBucket('');
+      setFirebaseMessagingSenderId('');
+      setFirebaseAppId('');
+      setFirebaseDatabaseId('');
       setStatusMessage({ type: 'success', text: `Comité "${newCommittee.name}" créé avec succès !` });
       
       // Auto dismiss success message after 4s
@@ -353,6 +379,117 @@ export default function AdminPanel() {
                   onChange={(e) => setChairPassword(e.target.value)}
                   className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs font-bold text-neutral-900 placeholder-neutral-450 outline-none transition-all focus:border-neutral-400 focus:bg-white"
                 />
+              </div>
+
+              {/* Custom Firebase parameters */}
+              <div className="pt-4 border-t border-neutral-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <span className="block text-[10px] font-black text-neutral-900 uppercase tracking-widest">
+                      Séparer la base de données (Firebase externe)
+                    </span>
+                    <span className="text-[10.5px] text-neutral-500 font-semibold leading-normal">
+                      Connecter ce comité MUN à son propre projet Firebase individuel.
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useCustomFirebase}
+                      onChange={(e) => setUseCustomFirebase(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-6 bg-neutral-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neutral-950"></div>
+                  </label>
+                </div>
+
+                {useCustomFirebase && (
+                  <div className="space-y-4 pt-2 pb-4 px-4 bg-neutral-50 border border-neutral-200/60 rounded-2xl animate-fade-in">
+                    <div>
+                      <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                        Firebase Project ID <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required={useCustomFirebase}
+                        placeholder="Ex. gavelmunapp"
+                        value={firebaseProjectId}
+                        onChange={(e) => setFirebaseProjectId(e.target.value)}
+                        className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                        Firebase API Key <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required={useCustomFirebase}
+                        placeholder="Ex. AIzaSy..."
+                        value={firebaseApiKey}
+                        onChange={(e) => setFirebaseApiKey(e.target.value)}
+                        className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                          Firestore Database ID (Optionnel)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Par défaut: (default)"
+                          value={firebaseDatabaseId}
+                          onChange={(e) => setFirebaseDatabaseId(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                          Firebase App ID
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex. 1:1234567890:web:abcd1234"
+                          value={firebaseAppId}
+                          onChange={(e) => setFirebaseAppId(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                          Auth Domain (Optionnel)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex. projet.firebaseapp.com"
+                          value={firebaseAuthDomain}
+                          onChange={(e) => setFirebaseAuthDomain(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-black text-neutral-600 uppercase tracking-widest mb-1.5 pl-0.5">
+                          Storage Bucket (Optionnel)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex. projet.appspot.com"
+                          value={firebaseStorageBucket}
+                          onChange={(e) => setFirebaseStorageBucket(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
