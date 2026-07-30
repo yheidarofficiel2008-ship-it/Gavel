@@ -2241,7 +2241,10 @@ service cloud.firestore {
               <div className="pt-3 border-t border-neutral-100">
                 <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mb-2">{isEn ? "Detailed votes per delegation:" : "Détail des votes par délégation :"}</p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1">
-                  {committee.delegations?.filter(d => d.present).map(d => {
+                  {[...(committee.delegations || [])]
+                    .filter(d => d.present)
+                    .sort((a, b) => a.country.localeCompare(b.country, committee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                    .map(d => {
                     const countryVote = (activeBroadcast.votes || {})[d.country];
                     return (
                       <div key={d.country} className="flex items-center justify-between p-2 bg-neutral-50 border border-neutral-200 rounded-xl text-[10px] font-mono shadow-sm">
@@ -2904,7 +2907,9 @@ service cloud.firestore {
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
                       {committee.delegations && committee.delegations.length > 0 ? (
-                        committee.delegations.map((del) => {
+                        [...committee.delegations]
+                          .sort((a, b) => a.country.localeCompare(b.country, committee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                          .map((del) => {
                           const isSuspended = committee.suspendedDelegations?.includes(del.country);
                           return (
                             <div 
@@ -3019,7 +3024,9 @@ service cloud.firestore {
                         </thead>
                         <tbody>
                           {committee.delegations && committee.delegations.length > 0 ? (
-                            committee.delegations.map((del: any) => (
+                            [...committee.delegations]
+                              .sort((a, b) => a.country.localeCompare(b.country, committee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                              .map((del: any) => (
                               <GradeRow
                                 key={del.country}
                                 country={del.country}
@@ -3239,9 +3246,11 @@ service cloud.firestore {
                       onChange={(e) => setMsgTargetInput(e.target.value)}
                       className="text-[10px] font-bold bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-xl p-2 max-w-[150px] cursor-pointer outline-none"
                     >
-                      {committee.delegations?.map(d => (
-                        <option key={d.country} value={d.country}>{d.country}</option>
-                      ))}
+                      {[...(committee.delegations || [])]
+                        .sort((a, b) => a.country.localeCompare(b.country, committee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                        .map(d => (
+                          <option key={d.country} value={d.country}>{d.country}</option>
+                        ))}
                     </select>
                   )}
                 </div>

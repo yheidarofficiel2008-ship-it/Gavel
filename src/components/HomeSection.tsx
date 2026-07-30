@@ -823,9 +823,11 @@ export default function HomeSection({ onAdminClick }: HomeSectionProps) {
                         className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-900 outline-none focus:border-neutral-400 focus:bg-white transition-all cursor-pointer"
                       >
                         <option value="">Choisissez votre pays diplomate...</option>
-                        {selectedCommittee.delegations?.map((del) => (
-                          <option key={del.country} value={del.country} className="bg-white text-neutral-900">{del.country}</option>
-                        ))}
+                        {[...(selectedCommittee.delegations || [])]
+                          .sort((a, b) => a.country.localeCompare(b.country, selectedCommittee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                          .map((del) => (
+                            <option key={del.country} value={del.country} className="bg-white text-neutral-900">{del.country}</option>
+                          ))}
                       </select>
                     )}
                   </div>
