@@ -524,7 +524,7 @@ export default function CommitteeSessionView({
       if (speakerPaused) {
         setSpeakerTimeLeft(speakerDurationLeft);
       } else {
-        const elapsedSec = Math.floor((Date.now() - speakerLastUpdated) / 1005); // slight correction factor for accuracy
+        const elapsedSec = Math.floor((Date.now() - speakerLastUpdated) / 1000);
         const calculatedSpk = speakerDurationLeft - elapsedSec;
         setSpeakerTimeLeft(calculatedSpk > 0 ? calculatedSpk : 0);
       }
@@ -811,6 +811,7 @@ export default function CommitteeSessionView({
   const handleStartSessionTimer = async () => {
     const { activeSession } = committee as any;
     if (!activeSession) return;
+    if (!activeSession.paused) return; // already running
     try {
       await updateDoc(doc(db, 'committees', committeeId), {
         'activeSession.paused': false,
@@ -827,14 +828,15 @@ export default function CommitteeSessionView({
     const { activeSession } = committee as any;
     if (!activeSession || activeSession.paused) return;
     
-    const elapsedSec = Math.floor((Date.now() - activeSession.lastUpdated) / 1000);
-    const newDurationLeft = Math.max(0, activeSession.durationLeft - elapsedSec);
+    const now = Date.now();
+    const elapsedSec = Math.floor((now - (activeSession.lastUpdated || now)) / 1000);
+    const newDurationLeft = Math.max(0, (activeSession.durationLeft || 0) - elapsedSec);
 
     try {
       await updateDoc(doc(db, 'committees', committeeId), {
         'activeSession.paused': true,
         'activeSession.durationLeft': newDurationLeft,
-        'activeSession.lastUpdated': Date.now()
+        'activeSession.lastUpdated': now
       });
     } catch (err) {
       console.error(err);
@@ -846,17 +848,32 @@ export default function CommitteeSessionView({
     const { activeSession } = committee as any;
     if (!activeSession) return;
     try {
-      let currentLeft = activeSession.speakerDurationLeft;
-      if (currentLeft === undefined) {
-        currentLeft = Math.max(0, (activeSession.itemSpeakerTime || 0) - (activeSession.currentSpeakerTimeUsed || 0));
+      const now = Date.now();
+
+      let newGlobalLeft = activeSession.durationLeft ?? 0;
+      if (!activeSession.paused) {
+        const elapsedGlob = Math.floor((now - (activeSession.lastUpdated || now)) / 1000);
+        newGlobalLeft = Math.max(0, newGlobalLeft - elapsedGlob);
       }
+
+      const spkPaused = activeSession.speakerPaused !== undefined ? !!activeSession.speakerPaused : !!activeSession.paused;
+      let newSpeakerLeft = activeSession.speakerDurationLeft;
+      if (newSpeakerLeft === undefined) {
+        newSpeakerLeft = Math.max(0, (activeSession.itemSpeakerTime || 0) - (activeSession.currentSpeakerTimeUsed || 0));
+      }
+      if (!spkPaused) {
+        const elapsedSpk = Math.floor((now - (activeSession.speakerLastUpdated || activeSession.lastUpdated || now)) / 1000);
+        newSpeakerLeft = Math.max(0, newSpeakerLeft - elapsedSpk);
+      }
+
       await updateDoc(doc(db, 'committees', committeeId), {
         'activeSession.paused': false,
         'activeSession.speakerPaused': false,
         'activeSession.debateStarted': true,
-        'activeSession.speakerDurationLeft': currentLeft,
-        'activeSession.speakerLastUpdated': Date.now(),
-        'activeSession.lastUpdated': Date.now()
+        'activeSession.durationLeft': newGlobalLeft,
+        'activeSession.speakerDurationLeft': newSpeakerLeft,
+        'activeSession.speakerLastUpdated': now,
+        'activeSession.lastUpdated': now
       });
     } catch (err) {
       console.error(err);
@@ -869,8 +886,8 @@ export default function CommitteeSessionView({
     if (!activeSession) return;
 
     const now = Date.now();
-    const elapsedSecGo = activeSession.paused ? 0 : Math.floor((now - activeSession.lastUpdated) / 1000);
-    const newGlobalLeft = Math.max(0, activeSession.durationLeft - elapsedSecGo);
+    const elapsedSecGo = activeSession.paused ? 0 : Math.floor((now - (activeSession.lastUpdated || now)) / 1000);
+    const newGlobalLeft = Math.max(0, (activeSession.durationLeft || 0) - elapsedSecGo);
 
     const speakerPaused = activeSession.speakerPaused !== undefined ? !!activeSession.speakerPaused : !!activeSession.paused;
     const speakerLastUpdated = activeSession.speakerLastUpdated || activeSession.lastUpdated || now;
@@ -900,6 +917,9 @@ export default function CommitteeSessionView({
     const { activeSession } = committee as any;
     if (!activeSession) return;
 
+    const spkPaused = activeSession.speakerPaused !== undefined ? !!activeSession.speakerPaused : !!activeSession.paused;
+    if (!spkPaused) return; // already running
+
     let currentLeft = activeSession.speakerDurationLeft;
     if (currentLeft === undefined) {
       currentLeft = Math.max(0, (activeSession.itemSpeakerTime || 0) - (activeSession.currentSpeakerTimeUsed || 0));
@@ -925,20 +945,21 @@ export default function CommitteeSessionView({
     const speakerPaused = activeSession.speakerPaused !== undefined ? !!activeSession.speakerPaused : !!activeSession.paused;
     if (speakerPaused) return;
 
-    const speakerLastUpdated = activeSession.speakerLastUpdated || activeSession.lastUpdated || Date.now();
+    const now = Date.now();
+    const speakerLastUpdated = activeSession.speakerLastUpdated || activeSession.lastUpdated || now;
     let currentLeft = activeSession.speakerDurationLeft;
     if (currentLeft === undefined) {
       currentLeft = Math.max(0, (activeSession.itemSpeakerTime || 0) - (activeSession.currentSpeakerTimeUsed || 0));
     }
 
-    const elapsedSec = Math.floor((Date.now() - speakerLastUpdated) / 1000);
+    const elapsedSec = Math.floor((now - speakerLastUpdated) / 1000);
     const newSpeakerLeft = Math.max(0, currentLeft - elapsedSec);
 
     try {
       await updateDoc(doc(db, 'committees', committeeId), {
         'activeSession.speakerPaused': true,
         'activeSession.speakerDurationLeft': newSpeakerLeft,
-        'activeSession.speakerLastUpdated': Date.now()
+        'activeSession.speakerLastUpdated': now
       });
     } catch (err) {
       console.error(err);
@@ -952,7 +973,7 @@ export default function CommitteeSessionView({
     try {
       const now = Date.now();
       const isPaused = !!activeSession.paused;
-      const currentLeft = activeSession.durationLeft;
+      const currentLeft = activeSession.durationLeft || 0;
       const lastUpdated = activeSession.lastUpdated || now;
 
       let activeLeft = currentLeft;
@@ -979,19 +1000,14 @@ export default function CommitteeSessionView({
     const { activeSession } = committee as any;
     if (!activeSession) return;
     
-    const nextIndex = activeSession.currentSpeakerIndex + 1;
+    const nextIndex = (activeSession.currentSpeakerIndex || 0) + 1;
     let updateFields: any = {
       'activeSession.currentSpeakerIndex': nextIndex,
       'activeSession.currentSpeakerTimeUsed': 0,
       'activeSession.speakerDurationLeft': activeSession.itemSpeakerTime || 60,
       'activeSession.speakerPaused': true,
-      'activeSession.speakerLastUpdated': Date.now(),
-      'activeSession.lastUpdated': Date.now()
+      'activeSession.speakerLastUpdated': Date.now()
     };
-
-    if (activeSession.paused) {
-      updateFields['activeSession.paused'] = true;
-    }
 
     try {
       await updateDoc(doc(db, 'committees', committeeId), updateFields);
@@ -1263,6 +1279,7 @@ export default function CommitteeSessionView({
     try {
       await addDoc(collection(db, 'committees', committeeId, 'gossip'), {
         text: gossipInput.trim(),
+        authorCountry: joinedCountry,
         createdAt: Date.now()
       });
       setGossipInput('');
@@ -3284,7 +3301,11 @@ service cloud.firestore {
                 <div className="flex items-center justify-between pb-2.5 border-b border-neutral-100">
                   <h4 className="text-[10px] font-black uppercase tracking-widest text-[#999999] flex items-center space-x-2">
                     <span className="h-1.5 w-1.5 bg-amber-500 rounded-full animate-ping" />
-                    <span>{isEn ? "Anonymous Gossip Box" : "Gossip Box Anonyme"}</span>
+                    <span>
+                      {joinedRole === 'chair' 
+                        ? (isEn ? "Anonymous Gossip Box (Chair View)" : "Gossip Box Anonyme (Présidence)")
+                        : (isEn ? "My Sent Gossip Messages" : "Mes Messages Envoyés (Gossip Box)")}
+                    </span>
                   </h4>
                   
                   <span className="text-[9px] font-black tracking-widest px-2.5 py-0.5 rounded-full font-mono bg-amber-500/10 text-amber-600 border border-amber-500/10">
@@ -3294,7 +3315,9 @@ service cloud.firestore {
 
                 {/* Gossip List Feed */}
                 <div className="space-y-3.5 max-h-80 overflow-y-auto pr-1">
-                  {gossips.map((g) => (
+                  {gossips
+                    .filter(g => joinedRole === 'chair' || g.authorCountry === joinedCountry)
+                    .map((g) => (
                     <div 
                       key={g.id}
                       className="p-3.5 bg-[#FAF7F2] border border-secondary-200/50 rounded-2xl relative flex flex-col space-y-1.5 font-serif italic shadow-sm hover:translate-y-[-1px] transition-all duration-150"
@@ -3326,8 +3349,12 @@ service cloud.firestore {
                     </div>
                   ))}
 
-                  {gossips.length === 0 && (
-                    <p className="text-xs font-semibold text-neutral-400 italic text-center py-8">{isEn ? "No gossip submitted yet." : "Aucun ragot transmis pour le moment."}</p>
+                  {gossips.filter(g => joinedRole === 'chair' || g.authorCountry === joinedCountry).length === 0 && (
+                    <p className="text-xs font-semibold text-neutral-400 italic text-center py-8">
+                      {joinedRole === 'chair'
+                        ? (isEn ? "No gossip submitted yet." : "Aucun ragot transmis pour le moment.")
+                        : (isEn ? "No gossip submitted by your delegation yet." : "Aucun message anonyme transmis par votre délégation pour le moment.")}
+                    </p>
                   )}
                 </div>
               </div>
