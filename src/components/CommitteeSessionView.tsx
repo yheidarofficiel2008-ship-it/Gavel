@@ -48,7 +48,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Info
+  Info,
+  UserPlus
 } from 'lucide-react';
 
 interface CommitteeSessionViewProps {
@@ -274,6 +275,11 @@ export default function CommitteeSessionView({
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [confirmDeleteDelegationCountry, setConfirmDeleteDelegationCountry] = useState<string | null>(null);
   const [adjustTimerMinutes, setAdjustTimerMinutes] = useState<number>(1);
+
+  // Chair speaker list manual management states
+  const [chairAddSpeakerSelect, setChairAddSpeakerSelect] = useState('');
+  const [chairCustomSpeakerInput, setChairCustomSpeakerInput] = useState('');
+  const [showCustomSpeakerInput, setShowCustomSpeakerInput] = useState(false);
 
   // Sound play tracker
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -1052,6 +1058,61 @@ export default function CommitteeSessionView({
     }
   };
 
+  // Chair manually adds a delegation to the ongoing debate
+  const handleChairAddSpeaker = async (countryToAdd?: string) => {
+    const targetCountry = (countryToAdd || (showCustomSpeakerInput ? chairCustomSpeakerInput : chairAddSpeakerSelect) || '').trim();
+    if (!targetCountry || !committee?.activeSession) return;
+
+    const { activeSession } = committee as any;
+    const speakers = [...(activeSession.speakers || [])];
+    const updatedSpeakers = [...speakers, targetCountry];
+
+    try {
+      let updateFields: any = {
+        'activeSession.speakers': updatedSpeakers
+      };
+
+      // If the speakers list was empty, initialize the active speaker parameters
+      if (speakers.length === 0) {
+        updateFields['activeSession.currentSpeakerIndex'] = 0;
+        updateFields['activeSession.currentSpeakerTimeUsed'] = 0;
+        updateFields['activeSession.speakerDurationLeft'] = activeSession.itemSpeakerTime || 60;
+        updateFields['activeSession.speakerPaused'] = true;
+        updateFields['activeSession.speakerLastUpdated'] = Date.now();
+      }
+
+      await updateDoc(doc(db, 'committees', committeeId), updateFields);
+      setChairAddSpeakerSelect('');
+      setChairCustomSpeakerInput('');
+      setShowCustomSpeakerInput(false);
+    } catch (err) {
+      console.error("Error adding speaker to debate:", err);
+    }
+  };
+
+  // Chair clears all speakers from the ongoing debate
+  const handleClearAllSpeakers = async () => {
+    const { activeSession } = committee as any;
+    if (!activeSession) return;
+    const confirmMsg = committee.language === 'EN'
+      ? "Are you sure you want to clear all delegations from the ongoing debate's speakers list?"
+      : "Êtes-vous sûr de vouloir vider toute la liste des orateurs du débat en cours ?";
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await updateDoc(doc(db, 'committees', committeeId), {
+        'activeSession.speakers': [],
+        'activeSession.currentSpeakerIndex': 0,
+        'activeSession.currentSpeakerTimeUsed': 0,
+        'activeSession.speakerDurationLeft': activeSession.itemSpeakerTime || 60,
+        'activeSession.speakerPaused': true,
+        'activeSession.speakerLastUpdated': Date.now()
+      });
+    } catch (err) {
+      console.error("Error clearing speakers:", err);
+    }
+  };
+
   // Remove a speaker from the list
   const handleRemoveSpeaker = async (idx: number) => {
     const { activeSession } = committee as any;
@@ -1061,18 +1122,30 @@ export default function CommitteeSessionView({
       speakers.splice(idx, 1);
 
       let currentIdx = activeSession.currentSpeakerIndex || 0;
-      if (idx < currentIdx) {
-        currentIdx = Math.max(0, currentIdx - 1);
+      let updateFields: any = {
+        'activeSession.speakers': speakers
+      };
+
+      if (speakers.length === 0) {
+        updateFields['activeSession.currentSpeakerIndex'] = 0;
+        updateFields['activeSession.currentSpeakerTimeUsed'] = 0;
+        updateFields['activeSession.speakerDurationLeft'] = activeSession.itemSpeakerTime || 60;
+        updateFields['activeSession.speakerPaused'] = true;
+        updateFields['activeSession.speakerLastUpdated'] = Date.now();
+      } else if (idx < currentIdx) {
+        updateFields['activeSession.currentSpeakerIndex'] = Math.max(0, currentIdx - 1);
       } else if (idx === currentIdx) {
-        currentIdx = Math.min(Math.max(0, speakers.length - 1), currentIdx);
+        const newCurrentIdx = Math.min(Math.max(0, speakers.length - 1), currentIdx);
+        updateFields['activeSession.currentSpeakerIndex'] = newCurrentIdx;
+        updateFields['activeSession.currentSpeakerTimeUsed'] = 0;
+        updateFields['activeSession.speakerDurationLeft'] = activeSession.itemSpeakerTime || 60;
+        updateFields['activeSession.speakerPaused'] = true;
+        updateFields['activeSession.speakerLastUpdated'] = Date.now();
       }
 
-      await updateDoc(doc(db, 'committees', committeeId), {
-        'activeSession.speakers': speakers,
-        'activeSession.currentSpeakerIndex': currentIdx
-      });
+      await updateDoc(doc(db, 'committees', committeeId), updateFields);
     } catch (err) {
-      console.error(err);
+      console.error("Error removing speaker:", err);
     }
   };
 
@@ -2521,20 +2594,107 @@ service cloud.firestore {
               </div>
 
               {/* Dynamic Speakers list queue */}
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1.5 border-b border-neutral-100">
-                  <span className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">{isEn ? "Speakers' List" : "Liste des Orateurs"} ({committee.activeSession.speakers?.length || 0})</span>
-                  {joinedRole === 'chair' && (
-                    <button 
-                      onClick={handleNextSpeaker}
-                      className="text-[10px] font-extrabold text-neutral-950 hover:underline uppercase tracking-wider flex items-center space-x-1 cursor-pointer bg-transparent border-none"
-                      title={isEn ? "Force passing to the chronologically next speaker" : "Forcer le passage à l'orateur suivant chronologiquement"}
-                    >
-                      <span>{isEn ? "Next speaker" : "Prochain orateur"}</span>
-                      <ChevronRight className="h-3 w-3" />
-                    </button>
-                  )}
+                  <span className="text-[10px] font-black uppercase text-neutral-400 tracking-wider">
+                    {isEn ? "Speakers' List" : "Liste des Orateurs"} ({committee.activeSession.speakers?.length || 0})
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    {joinedRole === 'chair' && (
+                      <>
+                        {committee.activeSession.speakers && committee.activeSession.speakers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllSpeakers}
+                            className="text-[10px] font-bold text-neutral-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded-lg uppercase tracking-wider transition-all cursor-pointer"
+                            title={isEn ? "Clear all speakers from the debate" : "Vider tous les orateurs du débat"}
+                          >
+                            {isEn ? "Clear list" : "Vider la liste"}
+                          </button>
+                        )}
+                        <button 
+                          onClick={handleNextSpeaker}
+                          className="text-[10px] font-extrabold text-neutral-950 hover:underline uppercase tracking-wider flex items-center space-x-1 cursor-pointer bg-transparent border-none"
+                          title={isEn ? "Force passing to the chronologically next speaker" : "Forcer le passage à l'orateur suivant chronologiquement"}
+                        >
+                          <span>{isEn ? "Next speaker" : "Prochain orateur"}</span>
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {/* Chair manual add delegation toolbar */}
+                {joinedRole === 'chair' && (
+                  <div className="bg-neutral-50 border border-neutral-200/80 rounded-2xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 animate-fade-in shadow-inner">
+                    {!showCustomSpeakerInput ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <select
+                          value={chairAddSpeakerSelect}
+                          onChange={(e) => setChairAddSpeakerSelect(e.target.value)}
+                          className="flex-1 bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-800 outline-none focus:border-neutral-400 cursor-pointer shadow-sm"
+                        >
+                          <option value="">{isEn ? "-- Select delegation to add --" : "-- Choisir une délégation à ajouter --"}</option>
+                          {[...(committee.delegations || [])]
+                            .sort((a, b) => a.country.localeCompare(b.country, committee.language === 'EN' ? 'en' : 'fr', { sensitivity: 'base' }))
+                            .map((del) => {
+                              const countInList = committee.activeSession?.speakers?.filter((s: string) => s === del.country).length || 0;
+                              return (
+                                <option key={del.country} value={del.country}>
+                                  {del.country} {countInList > 0 ? `(${countInList}x)` : ''} {!del.present ? `(${isEn ? 'Absent' : 'Absent'})` : ''}
+                                </option>
+                              );
+                            })}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!chairAddSpeakerSelect}
+                          onClick={() => handleChairAddSpeaker(chairAddSpeakerSelect)}
+                          className="bg-neutral-950 hover:bg-neutral-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3.5 py-1.5 text-xs font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center space-x-1.5 shrink-0 cursor-pointer"
+                          title={isEn ? "Add selected delegation to the ongoing debate" : "Ajouter la délégation sélectionnée au débat en cours"}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>{isEn ? "Add to debate" : "Ajouter au débat"}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder={isEn ? "Custom delegation name..." : "Nom délégation personnalisé..."}
+                          value={chairCustomSpeakerInput}
+                          onChange={(e) => setChairCustomSpeakerInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleChairAddSpeaker(chairCustomSpeakerInput);
+                            }
+                          }}
+                          className="flex-1 bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-bold text-neutral-900 uppercase placeholder-neutral-400 outline-none focus:border-neutral-400 shadow-sm"
+                        />
+                        <button
+                          type="button"
+                          disabled={!chairCustomSpeakerInput.trim()}
+                          onClick={() => handleChairAddSpeaker(chairCustomSpeakerInput)}
+                          className="bg-neutral-950 hover:bg-neutral-900 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3.5 py-1.5 text-xs font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-sm flex items-center space-x-1.5 shrink-0 cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>{isEn ? "Add to debate" : "Ajouter au débat"}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomSpeakerInput(!showCustomSpeakerInput)}
+                      className="text-[10px] font-bold text-neutral-500 hover:text-neutral-900 px-2.5 py-1.5 bg-white border border-neutral-200 rounded-xl hover:bg-neutral-100 transition-all cursor-pointer shrink-0 text-center shadow-sm"
+                      title={showCustomSpeakerInput ? (isEn ? "Choose from registry" : "Choisir parmi les inscrits") : (isEn ? "Type custom name" : "Saisir nom personnalisé")}
+                    >
+                      {showCustomSpeakerInput ? (isEn ? "Registry list" : "Depuis le registre") : (isEn ? "+ Custom name" : "+ Nom libre")}
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-2 py-2 max-h-40 overflow-y-auto">
                   {committee.activeSession.speakers && committee.activeSession.speakers.length > 0 ? (
@@ -2945,23 +3105,37 @@ service cloud.firestore {
                                   )}
                                 </div>
                                 
-                                {confirmDeleteDelegationCountry === del.country ? (
-                                  <button 
-                                    onClick={() => handleDeleteDelegation(del.country)}
-                                    className="bg-red-600 hover:bg-red-700 text-white text-[8px] font-black uppercase tracking-wider px-2 py-1 rounded-xl border-none transition-all cursor-pointer shadow-md animate-pulse"
-                                    title={isEn ? "Confirm deletion" : "Confirmer la suppression"}
-                                  >
-                                    {isEn ? "Confirm?" : "Confirmer?"}
-                                  </button>
-                                ) : (
-                                  <button 
-                                    onClick={() => handleDeleteDelegation(del.country)}
-                                    className="text-neutral-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition-all cursor-pointer bg-white border border-neutral-200 shadow-sm"
-                                    title={isEn ? "Delete delegation" : "Supprimer la délégation"}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
+                                <div className="flex items-center space-x-1.5">
+                                  {committee.activeSession && (
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleChairAddSpeaker(del.country)}
+                                      className="bg-neutral-950 hover:bg-neutral-900 text-white text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-xl transition-all cursor-pointer shadow-sm flex items-center space-x-1"
+                                      title={isEn ? "Add this delegation to the ongoing debate" : "Ajouter cette délégation au débat en cours"}
+                                    >
+                                      <UserPlus className="h-3 w-3" />
+                                      <span>{isEn ? "+ Debate" : "+ Débat"}</span>
+                                    </button>
+                                  )}
+                                  
+                                  {confirmDeleteDelegationCountry === del.country ? (
+                                    <button 
+                                      onClick={() => handleDeleteDelegation(del.country)}
+                                      className="bg-red-600 hover:bg-red-700 text-white text-[8px] font-black uppercase tracking-wider px-2 py-1 rounded-xl border-none transition-all cursor-pointer shadow-md animate-pulse"
+                                      title={isEn ? "Confirm deletion" : "Confirmer la suppression"}
+                                    >
+                                      {isEn ? "Confirm?" : "Confirmer?"}
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      onClick={() => handleDeleteDelegation(del.country)}
+                                      className="text-neutral-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition-all cursor-pointer bg-white border border-neutral-200 shadow-sm"
+                                      title={isEn ? "Delete delegation" : "Supprimer la délégation"}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
                               {/* Configuration presence */}
